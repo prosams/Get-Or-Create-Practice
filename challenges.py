@@ -19,7 +19,7 @@ app.debug = True
 app.config['SECRET_KEY'] = 'hardtoguessstringfromsi364thisisnotsupersecurebutitsok'
 
 ## Task 1: Create a database in postgresql in the code line below, and fill in your app's database URI.
-app.config["SQLALCHEMY_DATABASE_URI"] = ""
+app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://localhost/DS6"
 app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -62,18 +62,25 @@ class SongForm(FlaskForm):
 ### For database additions / get_or_create functions
 
 def get_or_create_artist(artist_name):
-    # Query the artist table and filter using artist_name
-    # If artist exists, return the artist object
-    # Else add a new artist to the artist table
-    pass
+    artist = db.session.query(Artist).filter_by(name=artist_name).first()    # Query the artist table and filter using artist_name
+    if artist:
+        return artist    # If artist exists, return the artist object
+    else:
+        artist = Artist(name=artist_name)     # Else add a new artist to the artist table
+        db.session.add(artist)
+        db.session.commit()
+        return artist
 
 def get_or_create_song(song_title, song_artist, song_genre):
-    # Query the song table using song_title
-    # If song exists, return the song object
-    # Else add a new song to the song table.
-    # NOTE : You will need artist id because that is the foreign key in the song table.
-    # So if you are adding a new song, you will have to make a call to get_or_create_artist function using song_artist
-    pass
+    song = db.session.query(Song).filter_by(title=song_title).first()     # Query the song table using song_title
+    if song:
+        return song     # If song exists, return the song object
+    else:
+        artist = get_or_create_artist(song_artist) # So if you are adding a new song, you will have to make a call to get_or_create_artist function using song_artist
+        song = Song(title = song_title, genre=song_genre, artist_id=artist.id)     # NOTE : You will need artist id because that is the foreign key in the song table.
+        db.session.add(song)     # Else add a new song to the song table.
+        db.session.commit()
+        return song
 
 ##### Set up Controllers (view functions) #####
 
@@ -94,12 +101,21 @@ def index():
     num_songs = len(songs)
     form = SongForm()
     if form.validate_on_submit():
-        pass
+        song_form = form.song.data
+        print(song_form)
+        if db.session.query(Song).filter_by(title=form.song.data).first(): #just the first value that we get
+            flash("You've already saved a song with that title!")
+        else:
+            song = get_or_create_song(form.song.data, form.artist.data, form.genre.data)
+        # print(song.title)
+        # print(song.artist_id)
+        # print(song.genre)
+            return redirect(url_for("see_all"))
         ## Get the data from the form
         ## Query the Song table using the song name to check if song exists.
         #####   If song exists, reload the form and flash("You've already saved a song with that title!")
         #####   Else use get_or_create_song function to add the song to the database, and after adding redirect to the /all_songs route.
-    return render_template('index.html', form=form,num_songs=num_songs)
+    return render_template('index.html', form=form, num_songs=num_songs)
 
 
 # Task 1.4: Update the view function.
@@ -114,11 +130,18 @@ def index():
 ############################################
 @app.route('/all_songs')
 def see_all():
-    return 'Update this view function to view all songs!'
+    all_songs = []
+    songs = Song.query.all()
+    for s in songs:
+        artist = Artist.query.filter_by(id=s.artist_id).first()
+        all_songs.append((s.title, artist.name, s.genre))
+    return render_template('all_songs.html', all_songs = all_songs)
 
 @app.route('/all_artists')
 def see_all_artists():
-    return "Update this view function to view all artists!"
+    artists = Artist.query.all()
+    names = [(a.name, len(Song.query.filter_by(artist_id=a.id).all())) for a in artists]
+    return render_template('all_artists.html', artist_names=names)
 
 if __name__ == '__main__':
     db.create_all()
